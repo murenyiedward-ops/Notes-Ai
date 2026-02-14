@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#4f46e5">
+    <title>AI Meeting Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @keyframes pulse-red {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .recording-active { animation: pulse-red 2s infinite; }
+        .markdown-content h1 { @apply text-2xl font-bold mb-4 text-slate-900; }
+        .markdown-content h2 { @apply text-xl font-semibold mt-6 mb-2 border-b pb-1 text-slate-800; }
+        .markdown-content ul { @apply list-disc ml-5 mb-4 space-y-1; }
+        .markdown-content p { @apply mb-3 text-slate-700 leading-relaxed; }
+        .markdown-content strong { @apply font-bold text-slate-900; }
+        button { touch-action: manipulation; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900 pb-10">
+
+    <div class="max-w-5xl mx-auto px-4 py-6">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div>
+                <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
+                    <i data-lucide="mic" class="text-indigo-600"></i>
+                    AI Note Taker Pro
+                </h1>
+                <p class="text-slate-500 text-sm mt-1">Professional meeting insights (English & Kiswahili).</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="status-badge" class="hidden px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    RECORDING
+                </div>
+                <div id="timer" class="text-lg font-mono font-medium text-slate-600 hidden">00:00</div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Column: Controls -->
+            <div class="lg:col-span-1 space-y-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Record</h2>
+                    
+                    <button id="record-btn" class="w-full py-4 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all flex items-center justify-center gap-3 shadow-lg shadow-indigo-200 active:scale-95">
+                        <i data-lucide="play"></i>
+                        <span>Start Recording</span>
+                    </button>
+
+                    <button id="stop-btn" disabled class="w-full mt-3 py-4 px-6 rounded-xl bg-slate-100 text-slate-400 font-semibold transition-all flex items-center justify-center gap-3 cursor-not-allowed active:scale-95">
+                        <i data-lucide="square"></i>
+                        Stop & Analyze
+                    </button>
+
+                    <div class="mt-6">
+                        <canvas id="visualizer" class="w-full h-16 bg-slate-900 rounded-lg"></canvas>
+                    </div>
+                </div>
+
+                <!-- Customization Panel -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-3 h-3"></i>
+                        Settings
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1 uppercase text-indigo-600">Language (Lugha)</label>
+                            <select id="meeting-lang" class="w-full p-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="multilingual">Auto-Detect (Kiswahili/English)</option>
+                                <option value="kiswahili">Kiswahili Only</option>
+                                <option value="english">English Only</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1 uppercase">Meeting Type</label>
+                            <select id="meeting-type" class="w-full p-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="general">Standard Meeting</option>
+                                <option value="sales">Sales Discovery</option>
+                                <option value="technical">Technical Architecture</option>
+                                <option value="brainstorm">Creative Brainstorming</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Results -->
+            <div class="lg:col-span-2">
+                <div class="bg-white min-h-[450px] rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                    <div class="border-b border-slate-100 p-4 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
+                        <span class="text-sm font-medium text-slate-500 flex items-center gap-2">
+                            <i data-lucide="file-text" class="w-4 h-4"></i>
+                            Output / Maelezo
+                        </span>
+                        <button id="copy-btn" class="hidden p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    
+                    <div id="content-area" class="p-6 md:p-8 flex-grow flex flex-col">
+                        <!-- Default State -->
+                        <div id="placeholder" class="m-auto text-center">
+                            <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i data-lucide="mic-off" class="text-slate-300 w-6 h-6"></i>
+                            </div>
+                            <h3 class="text-md font-medium text-slate-900">Tayari kurekodi</h3>
+                            <p class="text-slate-500 text-sm max-w-xs mx-auto mt-1">Tap start to record your meeting.</p>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div id="loading" class="hidden m-auto text-center">
+                            <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent mb-4"></div>
+                            <h3 class="text-md font-medium text-slate-900">AI is thinking...</h3>
+                            <p class="text-slate-500 text-sm mt-1">Analyzing audio & generating notes.</p>
+                        </div>
+
+                        <!-- Markdown Content -->
+                        <div id="output" class="hidden w-full text-left markdown-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        lucide.createIcons();
+        
+        // IMPORTANT: Get your key from https://aistudio.google.com/
+        const API_KEY = "YOUR_GEMINI_API_KEY_HERE"; 
+        
+        let mediaRecorder;
+        let audioChunks = [];
+        let startTime;
+        let timerInterval;
+        let audioContext;
+        let analyser;
+        let animationId;
+
+        const recordBtn = document.getElementById('record-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusBadge = document.getElementById('status-badge');
+        const timerDisplay = document.getElementById('timer');
+        const placeholder = document.getElementById('placeholder');
+        const loading = document.getElementById('loading');
+        const output = document.getElementById('output');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+
+        recordBtn.addEventListener('click', async () => {
+            if (API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
+                alert("Please add your Gemini API Key in the script tag.");
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                startRecording(stream);
+            } catch (err) {
+                alert("Microphone access denied or not supported.");
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            stopRecording();
+        });
+
+        function startRecording(stream) {
+            audioChunks = [];
+            // Determine supported mime type
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+            mediaRecorder = new MediaRecorder(stream, { mimeType });
+            
+            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                processAudio(audioBlob);
+                stream.getTracks().forEach(t => t.stop());
+            };
+
+            mediaRecorder.start();
+            setupVisualizer(stream);
+            
+            recordBtn.disabled = true;
+            recordBtn.classList.add('opacity-50', 'pointer-events-none');
+            stopBtn.disabled = false;
+            stopBtn.classList.replace('bg-slate-100', 'bg-red-600');
+            stopBtn.classList.replace('text-slate-400', 'text-white');
+            stopBtn.classList.add('recording-active');
+            statusBadge.classList.remove('hidden');
+            timerDisplay.classList.remove('hidden');
+            
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const diff = Date.now() - startTime;
+                const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
+                const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+                timerDisplay.textContent = `${mins}:${secs}`;
+            }, 1000);
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            cancelAnimationFrame(animationId);
+            recordBtn.disabled = false;
+            recordBtn.classList.remove('opacity-50', 'pointer-events-none');
+            stopBtn.disabled = true;
+            stopBtn.classList.replace('bg-red-600', 'bg-slate-100');
+            stopBtn.classList.replace('text-white', 'text-slate-400');
+            stopBtn.classList.remove('recording-active');
+            statusBadge.classList.add('hidden');
+            timerDisplay.classList.add('hidden');
+            clearInterval(timerInterval);
+            
+            placeholder.classList.add('hidden');
+            output.classList.add('hidden');
+            loading.classList.remove('hidden');
+        }
+
+        function setupVisualizer(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 64;
+            source.connect(analyser);
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function draw() {
+                animationId = requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+                canvasCtx.fillStyle = '#0f172a';
+                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                const barWidth = (canvas.width / dataArray.length) * 2.5;
+                let x = 0;
+                for(let i = 0; i < dataArray.length; i++) {
+                    const barHeight = dataArray[i] / 3;
+                    canvasCtx.fillStyle = `rgb(99, 102, 241)`;
+                    canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                    x += barWidth + 2;
+                }
+            }
+            draw();
+        }
+
+        async function processAudio(blob) {
+            try {
+                const base64Audio = await blobToBase64(blob);
+                const type = document.getElementById('meeting-type').value;
+                const lang = document.getElementById('meeting-lang').value;
+                
+                let languageInstruction = "The meeting may be in English, Kiswahili, or both.";
+                if (lang === "kiswahili") languageInstruction = "The audio is in Kiswahili. Provide the response in Kiswahili.";
+                if (lang === "english") languageInstruction = "The audio is in English. Provide the response in English.";
+
+                const prompt = `You are an expert meeting secretary. ${languageInstruction}
+                Analyze this ${type} meeting recording. 
+                Generate structured notes in Markdown including:
+                1. Executive Summary (Muhtasari)
+                2. Key Decisions (Maamuzi Muhimu)
+                3. Action Items (Majukumu) with owners if mentioned.
+                4. Next Steps.`;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                { inlineData: { mimeType: blob.type, data: base64Audio.split(',')[1] } }
+                            ]
+                        }]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                
+                const markdown = data.candidates[0].content.parts[0].text;
+                renderNotes(markdown);
+            } catch (err) {
+                console.error(err);
+                alert("Error: " + err.message);
+                loading.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+            }
+        }
+
+        function renderNotes(md) {
+            loading.classList.add('hidden');
+            output.classList.remove('hidden');
+            // Basic Markdown Parser
+            output.innerHTML = md
+                .replace(/^### (.*$)/gim, '<h2 class="text-lg font-bold mt-4">$1</h2>')
+                .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-6 border-b pb-2">$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-black mb-4">$1</h1>')
+                .replace(/^\* (.*$)/gim, '<li class="ml-4 list-disc">$1</li>')
+                .replace(/^- (.*$)/gim, '<li class="ml-4 list-disc">$1</li>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+                
+            document.getElementById('copy-btn').classList.remove('hidden');
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+        }
+        
+        document.getElementById('copy-btn').onclick = () => {
+            navigator.clipboard.writeText(output.innerText);
+            alert('Notes copied to clipboard!');
+        };
+    </script>
+</body>
+</html>
